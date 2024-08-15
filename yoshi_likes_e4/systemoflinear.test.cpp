@@ -1,3 +1,4 @@
+// @brief System of Linear Equations
 #define PROBLEM "https://judge.yosupo.jp/problem/system_of_linear_equations"
 #include <bits/stdc++.h>
 using namespace std;

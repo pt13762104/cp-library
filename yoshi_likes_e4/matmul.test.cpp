@@ -1,4 +1,4 @@
-// @brief Matrix multiplication (with kernel)
+// @brief Matrix multiplication
 #define PROBLEM "https://judge.yosupo.jp/problem/matrix_product"
 #pragma GCC optimize("O3,unroll-loops")
 #include <chrono>
