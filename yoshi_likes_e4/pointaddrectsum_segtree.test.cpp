@@ -9,7 +9,6 @@ using namespace __gnu_pbds;
 #define endl '\n'
 #endif
 #define multitest 0
-#define debug(x) cerr << #x << " = " << x << endl;
 struct dynamic_segtree
 {
     uint64_t v = 0;
@@ -64,7 +63,8 @@ void init()
 }
 struct Query
 {
-    int t, l, r, d, u, x, y, w;
+    bool t;
+    int a1 = 0, a2 = 0, a3 = 0, a4 = 0;
 };
 void Yoshi()
 {
@@ -72,30 +72,29 @@ void Yoshi()
     cin >> n >> q;
     vector<int> xv, yv;
     vector<Query> queries;
-    cerr << q << endl;
     while (n--)
     {
         int x, y, w;
         cin >> x >> y >> w;
-        queries.push_back({0, 0, 0, 0, 0, x, y, w});
+        queries.push_back({0, x, y, w});
         xv.push_back(x);
         yv.push_back(y);
     }
     while (q--)
     {
-        int t;
+        bool t;
         cin >> t;
         if (t)
         {
             int l, r, d, u;
             cin >> l >> d >> r >> u;
-            queries.push_back({t, l, r, d, u, 0, 0, 0});
+            queries.push_back({t, l, r, d, u});
         }
         else
         {
             int x, y, w;
             cin >> x >> y >> w;
-            queries.push_back({t, 0, 0, 0, 0, x, y, w});
+            queries.push_back({t, x, y, w});
             xv.push_back(x);
             yv.push_back(y);
         }
@@ -107,14 +106,14 @@ void Yoshi()
     for (auto &qu : queries)
     {
         if (qu.t)
-            cout << getsum(lower_bound(xv.begin(), itx, qu.l) - xv.begin(),
-                           lower_bound(xv.begin(), itx, qu.r) - xv.begin(),
-                           lower_bound(yv.begin(), ity, qu.d) - yv.begin(),
-                           lower_bound(yv.begin(), ity, qu.u) - yv.begin())
+            cout << getsum(lower_bound(xv.begin(), itx, qu.a1) - xv.begin(),
+                           lower_bound(xv.begin(), itx, qu.a2) - xv.begin(),
+                           lower_bound(yv.begin(), ity, qu.a3) - yv.begin(),
+                           lower_bound(yv.begin(), ity, qu.a4) - yv.begin())
                  << endl;
         else
-            update(upper_bound(xv.begin(), itx, qu.x) - xv.begin(), upper_bound(yv.begin(), ity, qu.y) - yv.begin(),
-                   qu.w);
+            update(upper_bound(xv.begin(), itx, qu.a1) - xv.begin(), upper_bound(yv.begin(), ity, qu.a2) - yv.begin(),
+                   qu.a3);
     }
 }
 signed main()
