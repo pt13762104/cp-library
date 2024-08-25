@@ -264,7 +264,7 @@ signed main()
             int l, r;
             cin >> l >> r;
             r--;
-            cout << sum(root, l, r) << endl;
+            cout << sum(root, l, r) << '\n';
         }
         }
     }
