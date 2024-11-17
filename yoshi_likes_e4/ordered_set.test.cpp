@@ -15,15 +15,15 @@ void init()
 const int B = 5000;
 template <int sz> struct fixed_buffer_deque
 {
-    int elems[2 * sz];
-    int start = sz, end = sz;
+    int elems[2 * sz + 2];
+    int start = sz + 1, end = sz + 1;
     void fix()
     {
-        if (start == 0 || end == 2 * sz)
+        if (start == 0 || end == 2 * sz + 2)
         {
             int cur_sz = end - start;
-            move(elems + start, elems + end, elems + sz);
-            start = sz;
+            move(elems + start, elems + end, elems + sz + 1);
+            start = sz + 1;
             end = start + cur_sz;
         }
     }
