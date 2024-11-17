@@ -12,18 +12,19 @@ using namespace std;
 void init()
 {
 }
+const int NMAX = 500000;
 const int B = 5000;
 template <int sz> struct fixed_buffer_deque
 {
-    int elems[4 * sz];
-    int start = 2 * sz, end = 2 * sz;
+    int elems[2 * (sz + NMAX / B)];
+    int start = sz + NMAX / B, end = sz + NMAX / B;
     void fix()
     {
-        if (start == 0 || end == 4 * sz)
+        if (start == 0 || end == 2 * (sz + NMAX / B))
         {
             int cur_sz = end - start;
-            move(elems + start, elems + end, elems + 2 * sz);
-            start = 2 * sz;
+            move(elems + start, elems + end, elems + sz + NMAX / B);
+            start = sz + NMAX / B;
             end = start + cur_sz;
         }
     }
