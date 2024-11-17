@@ -1,3 +1,4 @@
+// @brief Multiplication of Big Integers
 #define PROBLEM "https://judge.yosupo.jp/problem/multiplication_of_big_integers"
 #pragma GCC optimize("O3,unroll-loops")
 #include <bits/stdc++.h>
