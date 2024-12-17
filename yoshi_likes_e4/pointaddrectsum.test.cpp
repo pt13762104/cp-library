@@ -1,3 +1,4 @@
+// @brief Point Add Rectangle Sum
 #define PROBLEM "https://judge.yosupo.jp/problem/point_add_rectangle_sum"
 #include <bits/stdc++.h>
 #include <ext/pb_ds/assoc_container.hpp>
