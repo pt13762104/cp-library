@@ -1,45 +1,79 @@
 // @brief Matrix multiplication (mod 2)
 #define PROBLEM "https://judge.yosupo.jp/problem/matrix_product_mod_2"
 #pragma GCC optimize("O3,unroll-loops")
-#include <bitset>
+#include <chrono>
+#include <cstring>
 #include <iostream>
+#include <stdio.h>
+#define getchar getchar_unlocked
+#define putchar putchar_unlocked
 using namespace std;
 #define endl '\n'
 #define debug(x) cerr << #x << " = " << x << endl;
-unsigned long long a[4096][64];
-unsigned long long b[4096][64];
+alignas(32) long long a[4096][64];
+alignas(32) long long b[4096][64];
+alignas(32) long long c[4096][64];
+alignas(32) long long TMP[256][64];
+int rd()
+{
+    int k = 0, f = 1;
+    char s = getchar();
+    while (s < '0' || s > '9')
+    {
+        if (s == '-')
+            f = 0;
+        s = getchar();
+    }
+    while (s >= '0' && s <= '9')
+    {
+        k = (k << 1) + (k << 3) + (s ^ '0');
+        s = getchar();
+    }
+    return f ? k : -k;
+}
+bool rd_bool()
+{
+    char c = getchar();
+    while ((c != '0') && (c != '1'))
+        c = getchar();
+    return c ^ '0';
+}
 int main()
 {
-    ios_base::sync_with_stdio(0);
-    cin.tie(0);
-    cout.tie(0);
+    chrono::high_resolution_clock Clock;
+    auto t1 = Clock.now();
     int n, m, k;
-    cin >> n >> m >> k;
-    int clk = clock();
-    string s;
+    n = rd(), m = rd(), k = rd();
     for (int i = 0; i < n; i++)
-    {
-        cin >> s;
         for (int j = 0; j < m; j++)
-            if (s[j] - 48)
-                a[i][j >> 6] |= 1ULL << (j & 63);
-    }
+            a[i][j >> 6] |= rd_bool() * (1LL << (j & 63));
     for (int i = 0; i < m; i++)
-    {
-        cin >> s;
         for (int j = 0; j < k; j++)
-            if (s[j] - 48)
-                b[j][i >> 6] |= 1ULL << (i & 63);
+            b[i][j >> 6] |= rd_bool() * (1LL << (j & 63));
+    cerr << "Input time: " << chrono::duration_cast<chrono::milliseconds>(Clock.now() - t1).count() << " ms" << endl;
+    t1 = Clock.now();
+    for (int j = 0; j < 4096; j += 8)
+    {
+        for (int bit = 0; bit < 8; bit++)
+            for (int cur = 0; cur < (1 << bit); cur++)
+                for (int k = 0; k < 64; k++)
+                    TMP[cur + (1 << bit)][k] = TMP[cur][k] ^ b[j + bit][k];
+        for (int i = 0; i < 4096; i += 256)
+            for (int X = 0; X < 256; X++)
+            {
+                int mask = (a[i + X][j >> 6] >> (j & 63)) & 255;
+                if (mask)
+                    for (int k = 0; k < 64; k++)
+                        c[i + X][k] ^= TMP[mask][k];
+            }
     }
+    cerr << "Compute time: " << chrono::duration_cast<chrono::milliseconds>(Clock.now() - t1).count() << " ms" << endl;
+    t1 = Clock.now();
     for (int i = 0; i < n; i++)
     {
         for (int j = 0; j < k; j++)
-        {
-            int r = 0;
-            for (int k = 0; k < 64; k++)
-                r += __builtin_popcountll(a[i][k] & b[j][k]);
-            s[j] = (r & 1) + 48;
-        }
-        cout << s << endl;
+            putchar((((c[i][j >> 6]) >> (j & 63)) & 1) + '0');
+        putchar('\n');
     }
+    cerr << "Output time: " << chrono::duration_cast<chrono::milliseconds>(Clock.now() - t1).count() << " ms" << endl;
 }
