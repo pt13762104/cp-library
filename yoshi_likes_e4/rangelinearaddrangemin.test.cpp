@@ -1,4 +1,5 @@
 // @brief Range Linear Add Range Min
+#define PROBLEM "https://judge.yosupo.jp/problem/range_linear_add_range_min"
 #include <bits/stdc++.h>
 #include <ext/pb_ds/assoc_container.hpp>
 using namespace std;
