@@ -3,118 +3,217 @@
 #pragma GCC optimize("O3,unroll-loops")
 #include <bits/stdc++.h>
 using namespace std;
-const double PI = acos(-1);
-typedef double f64x4 __attribute__((vector_size(32)));
-typedef double f64x2 __attribute__((vector_size(16)));
-inline f64x4 mul(f64x4 a, f64x4 b)
+#ifndef yoshi_likes_e4
+#define endl '\n'
+#endif
+#define problem ""
+#define multitest 1
+#define debug(x) cerr << #x << " = " << x << endl;
+const int mod1 = 998244353;
+const int mod2 = 943718401;
+const int n1 = 145187429;
+const int n2 = 844668317;
+uint64_t primitive_root_cache_1st[1 << 19];
+uint64_t primitive_root_cache_2nd[1 << 19];
+chrono::high_resolution_clock Clock;
+void init()
 {
-    return f64x4{a[0] * b[0] - a[1] * b[1], a[0] * b[1] + a[1] * b[0], a[2] * b[2] - a[3] * b[3],
-                 a[2] * b[3] + a[3] * b[2]};
+    primitive_root_cache_1st[0] = 1;
+    for (int i = 1; i < 1 << 19; i++)
+        primitive_root_cache_1st[i] = (int64_t)primitive_root_cache_1st[i - 1] * 275981743 % mod1;
+    primitive_root_cache_2nd[0] = 1;
+    for (int i = 1; i < 1 << 19; i++)
+        primitive_root_cache_2nd[i] = (int64_t)primitive_root_cache_2nd[i - 1] * 135213552 % mod2;
 }
-inline f64x4 mul(f64x2 a, f64x4 b)
+int inv(long long n, long long mod)
 {
-    double r = a[0], i = a[1];
-    return r * b - f64x4{i * b[1], -i * b[0], i * b[3], -i * b[2]};
-}
-inline f64x2 mul(f64x2 a, f64x2 b)
-{
-    return f64x2{a[0] * b[0] - a[1] * b[1], a[0] * b[1] + a[1] * b[0]};
-}
-void dft(f64x2 *A, int n, bool invert = 0)
-{
-    int lga = __lg(n);
-    for (int i = 1, j = 0; i < n; i++)
+    long long k = mod - 2, res = 1;
+    while (k)
     {
-        int bit = n / 2;
+        if (k & 1)
+        {
+            res *= n;
+            res %= mod;
+        }
+        n *= n;
+        n %= mod;
+        k >>= 1;
+    }
+    return res;
+}
+void dft_1st(vector<unsigned int> &A)
+{
+    auto t1 = Clock.now();
+    for (int i = 1, j = 0; i < A.size(); ++i)
+    {
+        int bit = A.size() / 2;
         for (; j >= bit; bit /= 2)
             j -= bit;
         j += bit;
         if (i < j)
             swap(A[i], A[j]);
     }
-    double mf = (invert ? 0.5 : 1);
-    alignas(32) f64x4 *AA = (f64x4 *)A;
-    for (int k = 0; k < n; k += 2)
+    if (A.size() > 1000000)
+        cerr << "Bit reversal: " << chrono::duration_cast<chrono::milliseconds>(Clock.now() - t1).count() << " ms"
+             << endl;
+    t1 = Clock.now();
+    for (int s = 1; s <= __lg(A.size()); s++)
     {
-        f64x2 t = A[k + 1], u = A[k];
-        A[k] = (u + t) * mf;
-        A[k + 1] = (u - t) * mf;
-    }
-    for (int s = 2; s <= lga; s++)
-    {
-        int m = 1 << (s - 1);
-        f64x4 ww{1, 0, cos(2 * (invert ? -1 : 1) * PI / (1 << s)), sin(2 * (invert ? -1 : 1) * PI / (1 << s))};
-        f64x2 tw{cos(2 * (invert ? -1 : 1) * PI / m), sin(2 * (invert ? -1 : 1) * PI / m)};
-        for (int k = 0; k < n >> 1; k += m)
-        {
-            f64x4 w1 = ww;
-            for (int j = 0; j < (m >> 1); j++, w1 = mul(tw, w1))
+        int m = 1 << s;
+        for (int k = 0; k < A.size(); k += m)
+            for (int j = 0; j < (m >> 1); j++)
             {
-                f64x4 u = AA[k + j], t = mul(w1, AA[k + j + (m >> 1)]);
-                AA[k + j] = (u + t) * mf;
-                AA[k + j + (m >> 1)] = (u - t) * mf;
+                int t = (primitive_root_cache_1st[((1 << 20) / m) * j] * A[k + j + (m >> 1)]) % mod1, u = A[k + j];
+                A[k + j] = (u + t) - mod1 * (u + t >= mod1);
+                A[k + j + (m >> 1)] = (u + mod1 - t) - mod1 * (u >= t);
             }
-        }
     }
+    if (A.size() > 1000000)
+        cerr << "FFT: " << chrono::duration_cast<chrono::milliseconds>(Clock.now() - t1).count() << " ms" << endl;
 }
-int main()
+void idft_1st(vector<unsigned int> &a)
 {
+    int invn = inv(a.size(), mod1);
+    reverse(a.begin() + 1, a.end());
+    dft_1st(a);
+    for (auto &i : a)
+        i = (uint64_t)i * invn % mod1;
+}
+void dft_2nd(vector<unsigned int> &A)
+{
+    auto t1 = Clock.now();
+    for (int i = 1, j = 0; i < A.size(); ++i)
+    {
+        int bit = A.size() / 2;
+        for (; j >= bit; bit /= 2)
+            j -= bit;
+        j += bit;
+        if (i < j)
+            swap(A[i], A[j]);
+    }
+    if (A.size() > 1000000)
+        cerr << "Bit reversal: " << chrono::duration_cast<chrono::milliseconds>(Clock.now() - t1).count() << " ms"
+             << endl;
+    t1 = Clock.now();
+    for (int s = 1; s <= __lg(A.size()); s++)
+    {
+        int m = 1 << s;
+        for (int k = 0; k < A.size(); k += m)
+            for (int j = 0; j < (m >> 1); j++)
+            {
+                int t = (primitive_root_cache_2nd[((1 << 20) / m) * j] * A[k + j + (m >> 1)]) % mod2, u = A[k + j];
+                A[k + j] = (u + t) - mod2 * (u + t >= mod2);
+                A[k + j + (m >> 1)] = (u + mod2 - t) - mod2 * (u >= t);
+            }
+    }
+    if (A.size() > 1000000)
+        cerr << "FFT: " << chrono::duration_cast<chrono::milliseconds>(Clock.now() - t1).count() << " ms" << endl;
+}
+void idft_2nd(vector<unsigned int> &a)
+{
+    int invn = inv(a.size(), mod2);
+    reverse(a.begin() + 1, a.end());
+    dft_2nd(a);
+    for (auto &i : a)
+        i = (uint64_t)i * invn % mod2;
+}
+int pow10[6] = {1, 10, 100, 1000, 10000, 100000};
+void Yoshi()
+{
+    string a, b;
+    cin >> a >> b;
+    vector<unsigned int> A6(a.size() / 6 + 1), B6(b.size() / 6 + 1);
+    int sign = 1, i = 0;
+    while (a.size() && a.back() >= '0' && a.back() <= '9')
+    {
+        A6[i / 6] += (a.back() - 48) * (pow10[i % 6]);
+        a.pop_back();
+        i++;
+    }
+    i = 0;
+    while (b.size() && b.back() >= '0' && b.back() <= '9')
+    {
+        B6[i / 6] += (b.back() - 48) * (pow10[i % 6]);
+        b.pop_back();
+        i++;
+    }
+    if (A6 == vector<unsigned int>(1) || B6 == vector<unsigned int>(1))
+    {
+        cout << 0 << endl;
+        return;
+    }
+    if (a.size())
+        sign *= -1;
+    if (b.size())
+        sign *= -1;
+    int sz = 1 << __lg(A6.size() + B6.size());
+    if (sz < A6.size() + B6.size())
+        sz <<= 1;
+    A6.resize(sz);
+    B6.resize(sz);
+    vector<unsigned int> aa_1 = A6, bb_1 = B6, aa_2 = A6, bb_2 = B6;
+    dft_1st(aa_1);
+    dft_1st(bb_1);
+    for (int i = 0; i < sz; i++)
+        aa_1[i] = ((int64_t)aa_1[i] * bb_1[i]) % mod1;
+    idft_1st(aa_1);
+    dft_2nd(aa_2);
+    dft_2nd(bb_2);
+    for (int i = 0; i < sz; i++)
+        aa_2[i] = ((int64_t)aa_2[i] * bb_2[i]) % mod2;
+    idft_2nd(aa_2);
+    vector<long long> cc_raw(sz);
+    for (int i = 0; i < sz; i++)
+        cc_raw[i] = ((__int128_t)aa_1[i] * mod2 * n2 + (__int128_t)aa_2[i] * mod1 * n1) % ((__int64_t)mod1 * mod2);
+    for (int i = 0; i < cc_raw.size() - 1; i++)
+    {
+        cc_raw[i + 1] += cc_raw[i] / 1000000;
+        cc_raw[i] %= 1000000;
+    }
+    vector<int> cc(sz * 6);
+    for (int i = 0; i < cc_raw.size(); i++)
+    {
+        cc[i * 6] += cc_raw[i] % 10;
+        cc[i * 6 + 1] += cc_raw[i] / 10 % 10;
+        cc[i * 6 + 2] += cc_raw[i] / 100 % 10;
+        cc[i * 6 + 3] += cc_raw[i] / 1000 % 10;
+        cc[i * 6 + 4] += cc_raw[i] / 10000 % 10;
+        cc[i * 6 + 5] += cc_raw[i] / 100000 % 10;
+    }
+    for (int i = 0; i < cc.size() - 1; i++)
+    {
+        cc[i + 1] += cc[i] / 10;
+        cc[i] %= 10;
+    }
+    string s = "";
+    if (sign != 1)
+        s += '-';
+    while (!cc.back())
+        cc.pop_back();
+    while (cc.size())
+    {
+        s += cc.back() + '0';
+        cc.pop_back();
+    }
+    cout << s << endl;
+}
+signed main()
+{
+#ifndef yoshi_likes_e4
     ios::sync_with_stdio(0);
     cin.tie(0);
     cout.tie(0);
-    int t;
-    cin >> t;
-    while (t--)
+    if (fopen(problem ".inp", "r"))
     {
-        string a, b;
-        cin >> a >> b;
-        int sz = a.size() + b.size() - (a[0] == '-') - (b[0] == '-'), old_sz = sz;
-        sz = 1 << __lg(sz);
-        if (sz < old_sz)
-            sz *= 2;
-        alignas(32) f64x2 aa[sz], bb[sz], cc[sz];
-        int c[sz];
-        memset(aa, 0, sizeof(f64x2) * sz);
-        memset(bb, 0, sizeof(f64x2) * sz);
-        memset(cc, 0, sizeof(f64x2) * sz);
-        memset(c, 0, sizeof(int) * sz);
-        int sign = (a[0] == '-' ? -1 : 1) * (b[0] == '-' ? -1 : 1);
-        for (int i = a.size() - 1, j = 0; i >= (a[0] == '-'); i--, j++)
-            aa[j] = f64x2{a[i] - 48, 0};
-        for (int i = b.size() - 1, j = 0; i >= (b[0] == '-'); i--, j++)
-            bb[j] = f64x2{b[i] - 48, 0};
-        if (sz > 64)
-        {
-            dft(aa, sz);
-            dft(bb, sz);
-            for (int i = 0; i < sz; i++)
-                cc[i] = mul(aa[i], bb[i]);
-            dft(cc, sz, 1);
-        }
-        else
-        {
-            for (int i = 0; i < a.size() - (a[0] == '-'); i++)
-                for (int j = 0; j < b.size() - (b[0] == '-'); j++)
-                    cc[i + j] += aa[i] * bb[j];
-        }
-        for (int i = 0; i < sz - 1; i++)
-        {
-            c[i] += cc[i][0] + 0.5;
-            c[i + 1] += c[i] / 10;
-            c[i] %= 10;
-        }
-        int ptr = old_sz - 1;
-        while (ptr >= 0 && !c[ptr])
-            ptr--;
-        if (ptr == -1)
-            cout << 0;
-        else
-        {
-            if (sign != 1)
-                cout << '-';
-            for (int i = ptr; i >= 0; i--)
-                cout << c[i];
-        }
-        cout << '\n';
+        freopen(problem ".inp", "r", stdin);
+        freopen(problem ".out", "w", stdout);
     }
+#endif
+    init();
+    int t = 1;
+#if multitest
+    cin >> t;
+#endif
+    while (t--)
+        Yoshi();
 }
