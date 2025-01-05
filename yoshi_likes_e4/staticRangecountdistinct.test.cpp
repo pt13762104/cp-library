@@ -77,12 +77,6 @@ signed main()
 #ifndef yoshi_likes_e4
     ios::sync_with_stdio(0);
     cin.tie(0);
-    cout.tie(0);
-    if (fopen(problem ".inp", "r"))
-    {
-        freopen(problem ".inp", "r", stdin);
-        freopen(problem ".out", "w", stdout);
-    }
 #endif
     init();
     int t = 1;
