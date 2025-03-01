@@ -69,7 +69,7 @@ void Yoshi()
         int l, r;
         cin >> l >> r;
         r--;
-        cout << g(l - 1, r) - g(l - 1, l - 1) << endl;
+        cout << g(l - 1, r) - l << endl;
     }
 }
 signed main()
