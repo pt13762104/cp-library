@@ -1,3 +1,5 @@
+// @brief Matrix multiplication (mod 2)
+#define PROBLEM "https://judge.yosupo.jp/problem/matrix_product_mod_2"
 #pragma GCC optimize("O3,unroll-loops")
 #include <chrono>
 #include <immintrin.h>
