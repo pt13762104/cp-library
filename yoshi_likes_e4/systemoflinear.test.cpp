@@ -1,11 +1,11 @@
-// @brief System of Linear Equations
-#define PROBLEM "https://judge.yosupo.jp/problem/system_of_linear_equations"
 #include <bits/stdc++.h>
+#pragma GCC optimize("Ofast,unroll-loops")
 using namespace std;
 #define int long long
 #ifndef yoshi_likes_e4
 #define endl '\n'
 #endif
+#define problem ""
 #define multitest 0
 #define debug(x) cerr << #x << " = " << x << endl;
 const int MOD = 998244353;
@@ -34,10 +34,12 @@ int us(int a, int b)
     int r = (a - b) % MOD;
     return r + (r < 0 ? MOD : 0);
 }
-vector<vector<int>> __ref(vector<vector<int>> x)
+chrono::high_resolution_clock Clock;
+vector<vector<int>> RREF(vector<vector<int>> x, int N, int M)
 {
+    auto t1 = Clock.now();
     int h = 0, k = 0;
-    while (h < x.size() && k < x[0].size())
+    while (h < N && k < M)
     {
         // Any non-zero pivot row works
         int idx = h;
@@ -50,66 +52,39 @@ vector<vector<int>> __ref(vector<vector<int>> x)
             {
                 int coeff = (x[i][k] * inv(x[h][k])) % MOD;
                 for (int j = k; j < x[0].size(); j++)
-                {
                     x[i][j] = us(x[i][j], coeff * x[h][j]);
-                }
             }
             h++;
         }
         k++;
     }
+    cerr << "rref time: " << chrono::duration_cast<chrono::milliseconds>(Clock.now() - t1).count() << " ms" << endl;
     return x;
 }
-pair<vector<vector<int>>, vector<int>> convert_to_rref(vector<vector<int>> ref)
+#define getchar getchar_unlocked
+int rd()
 {
-    // Convert a system to the normal form
-    for (auto &i : ref)
+    int k = 0, f = 1;
+    char s = getchar();
+    while (s < '0' || s > '9')
     {
-        if (count(i.begin(), i.end() - 1, 0) == i.size() - 1 && i.back())
-        {
-            // No solution
-            return {};
-        }
+        if (s == '-')
+            f = 0;
+        s = getchar();
     }
-    int N = ref[0].size() - 1;
-    while (ref.size() < N)
-        ref.push_back(vector<int>(N + 1));
-    while (ref.size() > N)
-        ref.pop_back();
-    vector<vector<int>> tmp(N, vector<int>(N + 1));
-    for (int i = 0; i < N; i++)
-        tmp[i][N] = i;
-    for (int i = 0; i < N; i++)
-        for (int j = 0; j < N; j++)
-            tmp[i][j] = ref[j][i];
-    vector<vector<int>> nf, f;
-    for (int i = 0; i < N; i++)
-        if (count(tmp[i].begin(), tmp[i].end() - 1, 0) == N)
-            f.push_back(tmp[i]);
-        else
-            nf.push_back(tmp[i]);
-    tmp = nf;
-    for (auto &i : f)
-        tmp.push_back(i);
-    vector<int> P(N);
-    for (int i = 0; i < N; i++)
-        P[tmp[i][N]] = i;
-    for (int i = 0; i < N; i++)
-        for (int j = 0; j < N; j++)
-            ref[i][j] = tmp[j][i];
-    for (int i = 0; i < N; i++)
+    while (s >= '0' && s <= '9')
     {
-        if (ref[i][i] != 0)
-        {
-            int coeff = inv(ref[i][i]);
-            for (int j = i; j <= N; j++)
-            {
-                ref[i][j] *= coeff;
-                ref[i][j] %= MOD;
-            }
-        }
+        k = (k << 1) + (k << 3) + (s ^ '0');
+        s = getchar();
     }
-    return {ref, P};
+    return f ? k : -k;
+}
+bool rd_bool()
+{
+    char c = getchar();
+    while ((c != '0') && (c != '1'))
+        c = getchar();
+    return c ^ '0';
 }
 void init()
 {
@@ -117,47 +92,67 @@ void init()
 void Yoshi()
 {
     int N, M;
-    cin >> N >> M;
+    N = rd(), M = rd();
+    auto t0 = Clock.now();
     vector<vector<int>> raw(N, vector<int>(M + 1));
+    string s;
     for (int i = 0; i < N; i++)
         for (int j = 0; j < M; j++)
-            cin >> raw[i][j];
+            raw[i][j] = rd();
     for (int i = 0; i < N; i++)
-        cin >> raw[i][M];
-    auto [rref, P] = convert_to_rref(__ref(raw));
-    if (!rref.size())
+        raw[i][M] = rd();
+    cerr << "input time: " << chrono::duration_cast<chrono::milliseconds>(Clock.now() - t0).count() << " ms" << endl;
+    auto rref = RREF(raw, N, M);
+    for (int i = 0; i < N; i++)
+        if (count(rref[i].begin(), rref[i].end(), 0) == M && rref[i][M])
+        {
+            cout << -1 << endl;
+            return;
+        }
+    vector<vector<int>> pruned_rref;
+    for (int i = 0; i < N; i++)
+        if (count(rref[i].begin(), rref[i].end(), 0) != M + 1)
+            pruned_rref.push_back(rref[i]);
+    rref = vector<vector<int>>(M, vector<int>(M + 1));
+    for (int i = 0; i < pruned_rref.size(); i++)
     {
-        cout << -1 << endl;
-        return;
+        int lead = 0;
+        while (lead < M && !pruned_rref[i][lead])
+            lead++;
+        rref[lead] = pruned_rref[i];
     }
-    // rref is now [M, M+1]
-    // the rank of solution is the number of zero rows [free variables]
-    int R = 0;
+    vector<int> fv, FV(M);
     for (int i = 0; i < M; i++)
-        R += (count(rref[i].begin(), rref[i].end(), 0) == M + 1);
-    cout << R << endl;
-    // get an arbitary solution [with the free variables set to 0]
-    vector<int> sols(M);
-    // consider the first M - R rows
-    for (int i = M - R - 1; i >= 0; i--)
+        if (!rref[i][i])
+        {
+            FV[i] = fv.size() + 1;
+            fv.push_back(i);
+        }
+    int R = fv.size();
+    vector<vector<int>> sols(M, vector<int>(R + 1));
+    for (int i = M - 1; i >= 0; i--)
     {
-        sols[i] = rref[i][M];
-        for (int j = i + 1; j < M; j++)
-            sols[i] = us(sols[i], rref[i][j] * sols[j]);
-    }
-    for (int i = 0; i < M; i++)
-        cout << sols[P[i]] << " ";
-    cout << endl;
-    // get the basis
-    for (int k = M - R; k < M; k++)
-    {
-        vector<int> tmp(M);
-        tmp[k] = 1;
-        for (int i = M - R - 1; i >= 0; i--)
+        if (FV[i])
+            sols[i][FV[i]] = 1;
+        else
+        {
+            sols[i][0] = rref[i][M];
             for (int j = i + 1; j < M; j++)
-                tmp[i] = us(tmp[i], rref[i][j] * tmp[j]);
+                for (int k = 0; k <= R; k++)
+                    sols[i][k] = us(sols[i][k], rref[i][j] * sols[j][k]);
+            for (int k = 0; k <= R; k++)
+            {
+                sols[i][k] *= inv(rref[i][i]);
+                sols[i][k] %= MOD;
+            }
+        }
+    }
+    // R+1 * M matrix
+    cout << R << endl;
+    for (int j = 0; j <= R; j++)
+    {
         for (int i = 0; i < M; i++)
-            cout << tmp[P[i]] << " ";
+            cout << sols[i][j] << " ";
         cout << endl;
     }
 }
@@ -167,6 +162,11 @@ signed main()
     ios::sync_with_stdio(0);
     cin.tie(0);
     cout.tie(0);
+    if (fopen(problem ".inp", "r"))
+    {
+        freopen(problem ".inp", "r", stdin);
+        freopen(problem ".out", "w", stdout);
+    }
 #endif
     init();
     int t = 1;
