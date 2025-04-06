@@ -175,7 +175,8 @@ int64_t __ref(vector<vector<int>> &x)
     }
     for (int i = 0; i < x.size(); i++)
         for (int idx = 0; idx < x.size(); idx++)
-            Nz[i]->insert(idx);
+            if (x[i][idx])
+                Nz[i]->insert(idx);
     int h = 0, k = 0;
     int64_t sign = 1;
     while (h < x.size() && k < x.size())
