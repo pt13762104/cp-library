@@ -1,168 +1,392 @@
 // @brief Matrix multiplication (Strassen)
 #define PROBLEM "https://judge.yosupo.jp/problem/matrix_product"
-#pragma GCC optimize("O3,unroll-loops")
+#pragma GCC optimize(3)
+#pragma GCC optimize("unroll-loops")
+#pragma GCC target("avx2")
+#include <chrono>
+#include <cstring>
 #include <iostream>
+#include <type_traits>
 #include <vector>
-#define int unsigned
-int size1, lgsz;
-#define SZ_MAX 1024
-#define BLOCK 128
 using namespace std;
-struct row {
-  int val[SZ_MAX];
-  int &operator[](int x) { return val[x]; }
-};
-struct mat {
-  row val[SZ_MAX];
-  row &operator[](int x) { return val[x]; }
-};
-struct row64 {
-  unsigned long long val[BLOCK];
-  unsigned long long &operator[](int x) { return val[x]; }
-};
-struct mat64 {
-  row64 val[BLOCK];
-  row64 &operator[](int x) { return val[x]; }
-};
-unsigned long long modmod8 = 8ULL * 998244353 * 998244353;
-mat aa, bb, cc;
-mat tmpmat[9][10];
+namespace fastio
+{
+static constexpr int SZ = 1 << 17;
+char inbuf[SZ], outbuf[SZ];
+int in_left = 0, in_right = 0, out_right = 0;
+
+struct Pre
+{
+    char num[40000];
+    constexpr Pre() : num()
+    {
+        for (int i = 0; i < 10000; i++)
+        {
+            int n = i;
+            for (int j = 3; j >= 0; j--)
+            {
+                num[i * 4 + j] = n % 10 + '0';
+                n /= 10;
+            }
+        }
+    }
+} constexpr pre;
+
+inline void load()
+{
+    int len = in_right - in_left;
+    memmove(inbuf, inbuf + in_left, len);
+    in_right = len + fread(inbuf + len, 1, SZ - len, stdin);
+    in_left = 0;
+}
+
+inline void flush()
+{
+    fwrite(outbuf, 1, out_right, stdout);
+    out_right = 0;
+}
+
+inline void skip_space()
+{
+    if (in_left + 32 > in_right)
+        load();
+    while (inbuf[in_left] <= ' ')
+        in_left++;
+}
+
+inline void rd(char &c)
+{
+    if (in_left + 32 > in_right)
+        load();
+    c = inbuf[in_left++];
+}
+template <typename T> inline void rd(T &x)
+{
+    if (in_left + 32 > in_right)
+        load();
+    char c;
+    do
+        c = inbuf[in_left++];
+    while (c < '-');
+    [[maybe_unused]] bool minus = false;
+    if constexpr (is_signed<T>::value == true)
+    {
+        if (c == '-')
+            minus = true, c = inbuf[in_left++];
+    }
+    x = 0;
+    while (c >= '0')
+    {
+        x = x * 10 + (c & 15);
+        c = inbuf[in_left++];
+    }
+    if constexpr (is_signed<T>::value == true)
+    {
+        if (minus)
+            x = -x;
+    }
+}
+inline void rd()
+{
+}
+template <typename Head, typename... Tail> inline void rd(Head &head, Tail &...tail)
+{
+    rd(head);
+    rd(tail...);
+}
+
+inline void wt(char c)
+{
+    if (out_right > SZ - 32)
+        flush();
+    outbuf[out_right++] = c;
+}
+inline void wt(bool b)
+{
+    if (out_right > SZ - 32)
+        flush();
+    outbuf[out_right++] = b ? '1' : '0';
+}
+template <typename T> inline void wt(T x)
+{
+    if (out_right > SZ - 32)
+        flush();
+    if (!x)
+    {
+        outbuf[out_right++] = '0';
+        return;
+    }
+    if constexpr (is_signed<T>::value == true)
+    {
+        if (x < 0)
+            outbuf[out_right++] = '-', x = -x;
+    }
+    int i = 12;
+    char buf[16];
+    while (x >= 10000)
+    {
+        memcpy(buf + i, pre.num + (x % 10000) * 4, 4);
+        x /= 10000;
+        i -= 4;
+    }
+    if (x < 100)
+    {
+        if (x < 10)
+        {
+            outbuf[out_right] = '0' + x;
+            ++out_right;
+        }
+        else
+        {
+            uint32_t q = (uint32_t(x) * 205) >> 11;
+            uint32_t r = uint32_t(x) - q * 10;
+            outbuf[out_right] = '0' + q;
+            outbuf[out_right + 1] = '0' + r;
+            out_right += 2;
+        }
+    }
+    else
+    {
+        if (x < 1000)
+        {
+            memcpy(outbuf + out_right, pre.num + (x << 2) + 1, 3);
+            out_right += 3;
+        }
+        else
+        {
+            memcpy(outbuf + out_right, pre.num + (x << 2), 4);
+            out_right += 4;
+        }
+    }
+    memcpy(outbuf + out_right, buf + i + 4, 12 - i);
+    out_right += 12 - i;
+}
+inline void wt()
+{
+}
+template <typename Head, typename... Tail> inline void wt(Head &&head, Tail &&...tail)
+{
+    wt(head);
+    wt(forward<Tail>(tail)...);
+}
+template <typename... Args> inline void wtn(Args &&...x)
+{
+    wt(forward<Args>(x)...);
+    wt('\n');
+}
+
+struct Dummy
+{
+    Dummy()
+    {
+        atexit(flush);
+    }
+} dummy;
+
+} // namespace fastio
+using fastio::rd;
+using fastio::skip_space;
+using fastio::wt;
+using fastio::wtn;
+const int SZ = 1024;
+const int NAIVE = 128;
+chrono::high_resolution_clock Clock;
+uint64_t modmod8 = 8ULL * 998244353 * 998244353;
+alignas(32) unsigned AK[SZ * SZ], BK[SZ * SZ], CK[SZ * SZ], A[SZ * SZ], B[SZ * SZ], C[SZ * SZ],
+    TMPMAT[3][(SZ * SZ - 1) / 3];
+alignas(32) uint64_t TMP[NAIVE * NAIVE];
 #ifdef __clang__
-int __lg(int x) {
-  int cnt = 0;
-  while (x) {
-    x >>= 1;
-    cnt++;
-  }
-  return --cnt;
+int __lg(int x)
+{
+    int cnt = 0;
+    while (x)
+    {
+        x >>= 1;
+        cnt++;
+    }
+    return --cnt;
 }
 #endif
-int m32(int a) { return a % 998244353; }
-int us(int a, int b) {
-  if (a < b)
-    return 998244353 - us(b, a);
-  return m32(a - b);
+inline int ua(const unsigned a, const unsigned b)
+{
+    return min(a + b, a + b - 998244353);
 }
-void add03(mat &__restrict__ a, mat &__restrict__ res) {
-  for (int i = 0; i < size1; i++)
-    for (int j = 0; j < size1; j++) {
-      res[i][j] = m32(a[i][j] + a[i + size1][j + size1]);
+inline int us(const unsigned a, const unsigned b)
+{
+    return min(a - b, a + 998244353 - b);
+}
+void add03(const unsigned *a, unsigned *res, const int N)
+{
+    for (int i = 0; i < N * N; i++)
+        res[i] = ua(a[i], a[3 * N * N + i]);
+}
+void extract0(const unsigned *a, unsigned *res, const int N)
+{
+    for (int i = 0; i < N * N; i++)
+        res[i] = a[i];
+}
+void extract3(const unsigned *a, unsigned *res, const int N)
+{
+    for (int i = 0; i < N * N; i++)
+        res[i] = a[3 * N * N + i];
+}
+void add23(const unsigned *a, unsigned *res, const int N)
+{
+    for (int i = 0; i < N * N; i++)
+        res[i] = ua(a[2 * N * N + i], a[3 * N * N + i]);
+}
+void add01(const unsigned *a, unsigned *res, const int N)
+{
+    for (int i = 0; i < N * N; i++)
+        res[i] = ua(a[i], a[N * N + i]);
+}
+void sub13(const unsigned *a, unsigned *res, const int N)
+{
+    for (int i = 0; i < N * N; i++)
+        res[i] = us(a[N * N + i], a[3 * N * N + i]);
+}
+void sub20(const unsigned *a, unsigned *res, const int N)
+{
+    for (int i = 0; i < N * N; i++)
+        res[i] = us(a[2 * N * N + i], a[i]);
+}
+uint64_t Accum_time = 0;
+int calls = 0;
+#define BX 4
+#define BR 32
+#define BC 32
+void naive(const unsigned *a, const unsigned *b, unsigned *c, const int N)
+{
+    memset(TMP, 0, N * N * sizeof(uint64_t));
+    auto t2 = Clock.now();
+    calls++;
+    for (int i = 0; i < N; i += BR)
+        for (int k = 0; k < N; k += BX)
+        {
+            for (int j = 0; j < N; j += BC)
+                for (int n = 0; n < BR; n++)
+                    for (int m = 0; m < BC; m++)
+                        for (int kk = k; kk < k + BX; kk++)
+                            TMP[(i + n) * N + j + m] += (size_t)a[(i + n) * N + kk] * b[kk * N + j + m];
+            if (k % 8 == 0)
+                for (int n = 0; n < BR; n++)
+                    for (int j = 0; j < N; j++)
+                        TMP[(i + n) * N + j] = min(TMP[(i + n) * N + j], TMP[(i + n) * N + j] - modmod8);
+        }
+    for (int i = 0; i < N * N; i++)
+        c[i] = TMP[i] % 998244353;
+    Accum_time += chrono::duration_cast<chrono::nanoseconds>(Clock.now() - t2).count();
+}
+void mul(const unsigned *a, const unsigned *b, unsigned *c, const int N)
+{
+    memset(c, 0, N * N * sizeof(unsigned));
+    if (N == NAIVE)
+    {
+        naive(a, b, c, N);
+        return;
     }
+    const int offset = (SZ * SZ - N * N) / 3;
+    unsigned *m1 = TMPMAT[0] + offset;
+    unsigned *m2 = TMPMAT[1] + offset;
+    unsigned *m3 = TMPMAT[2] + offset;
+    add03(a, m2, N / 2);
+    add03(b, m3, N / 2);
+    mul(m2, m3, m1, N / 2);
+    memcpy(c, m1, N * N * sizeof(unsigned) / 4);
+    memcpy(c + 3 * N * N / 4, m1, N * N * sizeof(unsigned) / 4);
+    add23(a, m2, N / 2);
+    extract0(b, m3, N / 2);
+    mul(m2, m3, m1, N / 2);
+    memcpy(c + N * N / 2, m1, N * N * sizeof(unsigned) / 4);
+    for (int i = 0; i < N * N / 4; i++)
+        c[i + 3 * N * N / 4] = us(c[i + 3 * N * N / 4], m1[i]);
+    sub13(b, m3, N / 2);
+    extract0(a, m2, N / 2);
+    mul(m2, m3, m1, N / 2);
+    for (int i = 0; i < N * N / 4; i++)
+        c[i + N * N / 4] = ua(c[i + N * N / 4], m1[i]);
+    for (int i = 0; i < N * N / 4; i++)
+        c[i + 3 * N * N / 4] = ua(c[i + 3 * N * N / 4], m1[i]);
+    extract3(a, m2, N / 2);
+    sub20(b, m3, N / 2);
+    mul(m2, m3, m1, N / 2);
+    for (int i = 0; i < N * N / 4; i++)
+        c[i] = ua(c[i], m1[i]);
+    for (int i = 0; i < N * N / 4; i++)
+        c[i + N * N / 2] = ua(c[i + N * N / 2], m1[i]);
+    add01(a, m2, N / 2);
+    extract3(b, m3, N / 2);
+    mul(m2, m3, m1, N / 2);
+    for (int i = 0; i < N * N / 4; i++)
+        c[i] = us(c[i], m1[i]);
+    for (int i = 0; i < N * N / 4; i++)
+        c[i + N * N / 4] = ua(c[i + N * N / 4], m1[i]);
+    sub20(a, m2, N / 2);
+    add01(b, m3, N / 2);
+    mul(m2, m3, m1, N / 2);
+    for (int i = 0; i < N * N / 4; i++)
+        c[i + 3 * N * N / 4] = ua(c[i + 3 * N * N / 4], m1[i]);
+    sub13(a, m2, N / 2);
+    add23(b, m3, N / 2);
+    mul(m2, m3, m1, N / 2);
+    for (int i = 0; i < N * N / 4; i++)
+        c[i] = ua(c[i], m1[i]);
 }
-void extract3(mat &__restrict__ a, mat &__restrict__ res) {
-  for (int i = 0; i < size1; i++)
-    for (int j = 0; j < size1; j++) {
-      res[i][j] = m32(a[i + size1][j + size1]);
+void prep(unsigned *dst, const unsigned *src, int ofs1, int ofs2, int ofs3, int N)
+{
+    if (N == NAIVE)
+    {
+        for (int i = 0; i < NAIVE; i++)
+            for (int j = 0; j < NAIVE; j++)
+                dst[ofs3 + i * NAIVE + j] = src[(i + ofs1) * SZ + j + ofs2];
+        return;
     }
+    prep(dst, src, ofs1, ofs2, ofs3, N / 2);
+    prep(dst, src, ofs1, ofs2 + N / 2, ofs3 + N * N / 4, N / 2);
+    prep(dst, src, ofs1 + N / 2, ofs2, ofs3 + N * N / 2, N / 2);
+    prep(dst, src, ofs1 + N / 2, ofs2 + N / 2, ofs3 + 3 * N * N / 4, N / 2);
 }
-void add23(mat &__restrict__ a, mat &__restrict__ res) {
-  for (int i = 0; i < size1; i++)
-    for (int j = 0; j < size1; j++) {
-      res[i][j] = m32(a[i + size1][j] + a[i + size1][j + size1]);
+void prep_reverse(unsigned *dst, const unsigned *src, int ofs1, int ofs2, int ofs3, int N)
+{
+    if (N == NAIVE)
+    {
+        for (int i = 0; i < NAIVE; i++)
+            for (int j = 0; j < NAIVE; j++)
+                dst[(i + ofs1) * SZ + j + ofs2] = src[ofs3 + i * NAIVE + j];
+        return;
     }
+    prep_reverse(dst, src, ofs1, ofs2, ofs3, N / 2);
+    prep_reverse(dst, src, ofs1, ofs2 + N / 2, ofs3 + N * N / 4, N / 2);
+    prep_reverse(dst, src, ofs1 + N / 2, ofs2, ofs3 + N * N / 2, N / 2);
+    prep_reverse(dst, src, ofs1 + N / 2, ofs2 + N / 2, ofs3 + 3 * N * N / 4, N / 2);
 }
-void add01(mat &__restrict__ a, mat &__restrict__ res) {
-  for (int i = 0; i < size1; i++)
-    for (int j = 0; j < size1; j++) {
-      res[i][j] = m32(a[i][j] + a[i][j + size1]);
-    }
-}
-void sub13(mat &__restrict__ a, mat &__restrict__ res) {
-  for (int i = 0; i < size1; i++)
-    for (int j = 0; j < size1; j++) {
-      res[i][j] = us(a[i][j + size1], a[i + size1][j + size1]);
-    }
-}
-void sub20(mat &__restrict__ a, mat &__restrict__ res) {
-  for (int i = 0; i < size1; i++)
-    for (int j = 0; j < size1; j++) {
-      res[i][j] = us(a[i + size1][j], a[i][j]);
-    }
-}
-void naive(mat &__restrict__ a, mat &__restrict__ b, mat &__restrict__ cx) {
-  mat64 c;
-  for (int i = 0; i < size1; i++)
-    for (int j = 0; j < size1; j++)
-      c[i][j] = 0;
-  for (int i = 0; i < size1; i++)
-    for (int k = 0; k < size1; k++) {
-      for (int j = 0; j < size1; j++) {
-        c[i][j] += (unsigned long long)(a[i][k]) * (b[k][j]);
-      }
-      if (k % 8 == 0)
-        for (int j = 0; j < size1; j++)
-          c[i][j] = min(c[i][j], c[i][j] - modmod8);
-    }
-  for (int i = 0; i < size1; i++)
-    for (int j = 0; j < size1; j++)
-      cx[i][j] = c[i][j] % 998244353;
-}
-void mul(mat &__restrict__ a, mat &__restrict__ b, mat &__restrict__ c) {
-  if (size1 <= BLOCK) {
-    naive(a, b, c);
-    return;
-  }
-  size1 >>= 1;
-  lgsz--;
-  mat &__restrict__ m1 = tmpmat[0][lgsz];
-  mat &__restrict__ m2 = tmpmat[1][lgsz];
-  mat &__restrict__ m3 = tmpmat[2][lgsz];
-  mat &__restrict__ m4 = tmpmat[3][lgsz];
-  mat &__restrict__ m5 = tmpmat[4][lgsz];
-  mat &__restrict__ m6 = tmpmat[5][lgsz];
-  mat &__restrict__ m7 = tmpmat[6][lgsz];
-  mat &__restrict__ m8 = tmpmat[7][lgsz];
-  mat &__restrict__ m9 = tmpmat[8][lgsz];
-  add03(a, m8);
-  add03(b, m9);
-  mul(m8, m9, m1);
-  add23(a, m8);
-  mul(m8, b, m2);
-  sub13(b, m9);
-  mul(a, m9, m3);
-  extract3(a, m8);
-  sub20(b, m9);
-  mul(m8, m9, m4);
-  add01(a, m8);
-  extract3(b, m9);
-  mul(m8, m9, m5);
-  sub20(a, m8);
-  add01(b, m9);
-  mul(m8, m9, m6);
-  sub13(a, m8);
-  add23(b, m9);
-  mul(m8, m9, m7);
-  for (int i = 0; i < size1; i++)
-    for (int j = 0; j < size1; j++) {
-      c[i][j] = m32(us(m4[i][j], m5[i][j]) + m1[i][j] + m7[i][j]);
-      c[i][j + size1] = m32(m3[i][j] + m5[i][j]);
-      c[i + size1][j] = m32(m2[i][j] + m4[i][j]);
-      c[i + size1][j + size1] =
-          m32(us(m1[i][j], m2[i][j]) + m3[i][j] + m6[i][j]);
-    }
-  lgsz++;
-  size1 <<= 1;
-}
-signed main() {
-  ios::sync_with_stdio(0);
-  cin.tie(0);
-  cout.tie(0);
-  int n, m, p;
-  cin >> n >> m >> p;
-  int mx = max(max(m, n), p);
-  size1 = 1 << __lg(mx);
-  if (size1 < mx)
-    size1 <<= 1;
-  lgsz = __lg(size1);
-  for (int i = 0; i < n; i++)
-    for (int j = 0; j < m; j++)
-      cin >> aa[i][j];
-  for (int i = 0; i < m; i++)
-    for (int j = 0; j < p; j++)
-      cin >> bb[i][j];
-  mul(aa, bb, cc);
-  for (int i = 0; i < n; i++)
-    for (int j = 0; j < p; j++)
-      cout << cc[i][j] << " ";
-  cout << endl;
+signed main()
+{
+    ios::sync_with_stdio(0);
+    cin.tie(0);
+    cout.tie(0);
+    int n, m, p;
+    rd(n);
+    rd(m);
+    rd(p);
+    for (int i = 0; i < n; i++)
+        for (int j = 0; j < m; j++)
+            rd(AK[i * SZ + j]);
+    for (int i = 0; i < m; i++)
+        for (int j = 0; j < p; j++)
+            rd(BK[i * SZ + j]);
+    prep(A, AK, 0, 0, 0, SZ);
+    prep(B, BK, 0, 0, 0, SZ);
+    auto t1 = Clock.now();
+    mul(A, B, C, SZ);
+    cerr << "Compute time: " << chrono::duration_cast<chrono::nanoseconds>(Clock.now() - t1).count() << "ns" << endl;
+    prep_reverse(CK, C, 0, 0, 0, SZ);
+    cerr << "Accum_time: " << Accum_time << "ns" << endl;
+    cerr << "Calls: " << calls << endl;
+    for (int i = 0; i < n; i++)
+        for (int j = 0; j < p; j++)
+        {
+            wt(CK[i * SZ + j]);
+            wt(j == p - 1 ? '\n' : ' ');
+        }
 }
