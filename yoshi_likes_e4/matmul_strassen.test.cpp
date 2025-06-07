@@ -5,6 +5,7 @@
 #pragma GCC target("avx2")
 #include <chrono>
 #include <cstring>
+#include <immintrin.h>
 #include <iostream>
 #include <type_traits>
 #include <vector>
@@ -192,8 +193,7 @@ const int SZ = 1024;
 const int NAIVE = 128;
 chrono::high_resolution_clock Clock;
 uint64_t modmod8 = 8ULL * 998244353 * 998244353;
-alignas(32) unsigned AK[SZ * SZ], BK[SZ * SZ], CK[SZ * SZ], A[SZ * SZ], B[SZ * SZ], C[SZ * SZ],
-    TMPMAT[3][(SZ * SZ - 1) / 3];
+alignas(32) unsigned BUF[SZ * SZ], A[SZ * SZ], B[SZ * SZ], C[SZ * SZ], TMPMAT[3][(SZ * SZ - 1) / 3];
 alignas(32) uint64_t TMP[NAIVE * NAIVE];
 #ifdef __clang__
 int __lg(int x)
@@ -250,32 +250,88 @@ void sub20(const unsigned *a, unsigned *res, const int N)
     for (int i = 0; i < N * N; i++)
         res[i] = us(a[2 * N * N + i], a[i]);
 }
+const int s1 = 128, s2 = 64, s3 = 32;
+alignas(32) __m256i tmp[8 * NAIVE];
+alignas(32) __m256i t0, t1, t2, t3, t4, t5, t6, t7;
+alignas(32) uint64_t bb[NAIVE * NAIVE], cc[NAIVE * NAIVE];
 uint64_t Accum_time = 0;
 int calls = 0;
-#define BX 4
-#define BR 32
-#define BC 32
-void naive(const unsigned *a, const unsigned *b, unsigned *c, const int N)
+// https://stackoverflow.com/questions/54394350/simd-implement-mm256-max-epu64-and-mm256-min-epu64
+static inline __attribute__((always_inline)) __m256i pmin_epu64(__m256i a, __m256i b)
 {
-    memset(TMP, 0, N * N * sizeof(uint64_t));
-    auto t2 = Clock.now();
-    calls++;
-    for (int i = 0; i < N; i += BR)
-        for (int k = 0; k < N; k += BX)
-        {
-            for (int j = 0; j < N; j += BC)
-                for (int n = 0; n < BR; n++)
-                    for (int m = 0; m < BC; m++)
-                        for (int kk = k; kk < k + BX; kk++)
-                            TMP[(i + n) * N + j + m] += (size_t)a[(i + n) * N + kk] * b[kk * N + j + m];
-            if (k % 8 == 0)
-                for (int n = 0; n < BR; n++)
-                    for (int j = 0; j < N; j++)
-                        TMP[(i + n) * N + j] = min(TMP[(i + n) * N + j], TMP[(i + n) * N + j] - modmod8);
-        }
+    __m256i signbit = _mm256_set1_epi64x(0x8000'0000'0000'0000);
+    __m256i mask = _mm256_cmpgt_epi64(_mm256_xor_si256(a, signbit), _mm256_xor_si256(b, signbit));
+    return _mm256_blendv_epi8(a, b, mask);
+}
+void naive(const unsigned *a, const unsigned *B, unsigned *C, const int N)
+{
+    auto tp = Clock.now();
+    memset(cc, 0, N * N * sizeof(uint64_t));
     for (int i = 0; i < N * N; i++)
-        c[i] = TMP[i] % 998244353;
-    Accum_time += chrono::duration_cast<chrono::nanoseconds>(Clock.now() - t2).count();
+        bb[i] = B[i];
+    alignas(32) __m256i *b = (__m256i *)bb, *c = (__m256i *)cc;
+    calls++;
+    for (int i3 = 0; i3 < N; i3 += s3)
+    {
+        for (int k = 0; k < N; k++)
+        {
+            tmp[8 * k + 0] = b[k * N / 4 + i3 / 4 + 0];
+            tmp[8 * k + 1] = b[k * N / 4 + i3 / 4 + 1];
+            tmp[8 * k + 2] = b[k * N / 4 + i3 / 4 + 2];
+            tmp[8 * k + 3] = b[k * N / 4 + i3 / 4 + 3];
+            tmp[8 * k + 4] = b[k * N / 4 + i3 / 4 + 4];
+            tmp[8 * k + 5] = b[k * N / 4 + i3 / 4 + 5];
+            tmp[8 * k + 6] = b[k * N / 4 + i3 / 4 + 6];
+            tmp[8 * k + 7] = b[k * N / 4 + i3 / 4 + 7];
+        }
+        for (int i1 = 0; i1 < N; i1 += s1)
+            for (int i2 = 0; i2 < N; i2 += s2)
+                for (int i = i2; i < i2 + s2; i++)
+                {
+                    t0 = _mm256_load_si256(c + (i * N + i3) / 4 + 0);
+                    t1 = _mm256_load_si256(c + (i * N + i3) / 4 + 1);
+                    t2 = _mm256_load_si256(c + (i * N + i3) / 4 + 2);
+                    t3 = _mm256_load_si256(c + (i * N + i3) / 4 + 3);
+                    t4 = _mm256_load_si256(c + (i * N + i3) / 4 + 4);
+                    t5 = _mm256_load_si256(c + (i * N + i3) / 4 + 5);
+                    t6 = _mm256_load_si256(c + (i * N + i3) / 4 + 6);
+                    t7 = _mm256_load_si256(c + (i * N + i3) / 4 + 7);
+                    for (int k = i1; k < i1 + s1; k++)
+                    {
+                        __m256i aik = __m256i{} + a[i * N + k];
+                        if (k % 8 == 0)
+                        {
+                            t0 = pmin_epu64(t0, t0 - modmod8);
+                            t1 = pmin_epu64(t1, t1 - modmod8);
+                            t2 = pmin_epu64(t2, t2 - modmod8);
+                            t3 = pmin_epu64(t3, t3 - modmod8);
+                            t4 = pmin_epu64(t4, t4 - modmod8);
+                            t5 = pmin_epu64(t5, t5 - modmod8);
+                            t6 = pmin_epu64(t6, t6 - modmod8);
+                            t7 = pmin_epu64(t7, t7 - modmod8);
+                        }
+                        t0 = _mm256_add_epi64(t0, _mm256_mul_epi32(aik, tmp[8 * k + 0]));
+                        t1 = _mm256_add_epi64(t1, _mm256_mul_epi32(aik, tmp[8 * k + 1]));
+                        t2 = _mm256_add_epi64(t2, _mm256_mul_epi32(aik, tmp[8 * k + 2]));
+                        t3 = _mm256_add_epi64(t3, _mm256_mul_epi32(aik, tmp[8 * k + 3]));
+                        t4 = _mm256_add_epi64(t4, _mm256_mul_epi32(aik, tmp[8 * k + 4]));
+                        t5 = _mm256_add_epi64(t5, _mm256_mul_epi32(aik, tmp[8 * k + 5]));
+                        t6 = _mm256_add_epi64(t6, _mm256_mul_epi32(aik, tmp[8 * k + 6]));
+                        t7 = _mm256_add_epi64(t7, _mm256_mul_epi32(aik, tmp[8 * k + 7]));
+                    }
+                    _mm256_store_si256(c + (i * N + i3) / 4 + 0, t0);
+                    _mm256_store_si256(c + (i * N + i3) / 4 + 1, t1);
+                    _mm256_store_si256(c + (i * N + i3) / 4 + 2, t2);
+                    _mm256_store_si256(c + (i * N + i3) / 4 + 3, t3);
+                    _mm256_store_si256(c + (i * N + i3) / 4 + 4, t4);
+                    _mm256_store_si256(c + (i * N + i3) / 4 + 5, t5);
+                    _mm256_store_si256(c + (i * N + i3) / 4 + 6, t6);
+                    _mm256_store_si256(c + (i * N + i3) / 4 + 7, t7);
+                }
+    }
+    for (int i = 0; i < N * N; i++)
+        C[i] = cc[i] % 998244353;
+    Accum_time += chrono::duration_cast<chrono::nanoseconds>(Clock.now() - tp).count();
 }
 void mul(const unsigned *a, const unsigned *b, unsigned *c, const int N)
 {
@@ -371,22 +427,22 @@ signed main()
     rd(p);
     for (int i = 0; i < n; i++)
         for (int j = 0; j < m; j++)
-            rd(AK[i * SZ + j]);
+            rd(BUF[i * SZ + j]);
+    prep(A, BUF, 0, 0, 0, SZ);
     for (int i = 0; i < m; i++)
         for (int j = 0; j < p; j++)
-            rd(BK[i * SZ + j]);
-    prep(A, AK, 0, 0, 0, SZ);
-    prep(B, BK, 0, 0, 0, SZ);
+            rd(BUF[i * SZ + j]);
+    prep(B, BUF, 0, 0, 0, SZ);
     auto t1 = Clock.now();
     mul(A, B, C, SZ);
     cerr << "Compute time: " << chrono::duration_cast<chrono::nanoseconds>(Clock.now() - t1).count() << "ns" << endl;
-    prep_reverse(CK, C, 0, 0, 0, SZ);
+    prep_reverse(BUF, C, 0, 0, 0, SZ);
     cerr << "Accum_time: " << Accum_time << "ns" << endl;
     cerr << "Calls: " << calls << endl;
     for (int i = 0; i < n; i++)
         for (int j = 0; j < p; j++)
         {
-            wt(CK[i * SZ + j]);
+            wt(BUF[i * SZ + j]);
             wt(j == p - 1 ? '\n' : ' ');
         }
 }
