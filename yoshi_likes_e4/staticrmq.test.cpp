@@ -1,5 +1,5 @@
 // @brief Static Range Product
-#define PROBLEM "https://judge.yosupo.jp/problem/static_rmq"
+#define PROBLEM "https://judge.yosupo.jp/problem/staticrmq"
 #include <algorithm>
 #include <bit>
 #include <vector>
