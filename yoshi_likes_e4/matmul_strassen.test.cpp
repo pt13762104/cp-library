@@ -1,199 +1,290 @@
 // @brief Matrix multiplication (Strassen)
 #define PROBLEM "https://judge.yosupo.jp/problem/matrix_product"
-#pragma GCC optimize(3)
-#pragma GCC optimize("unroll-loops")
-#pragma GCC target("avx2")
+#pragma GCC optimize("Ofast,unroll-loops")
+#include <immintrin.h>
 #include <chrono>
 #include <cstring>
-#include <immintrin.h>
 #include <iostream>
 #include <type_traits>
 #include <vector>
 using namespace std;
 namespace fastio
 {
-static constexpr int SZ = 1 << 17;
-char inbuf[SZ], outbuf[SZ];
-int in_left = 0, in_right = 0, out_right = 0;
+static constexpr size_t buf_size = 1 << 18;
+static constexpr size_t integer_size = 20;
+static constexpr size_t block_size = 10000;
 
-struct Pre
+static char inbuf[buf_size + 1] = {};
+static char outbuf[buf_size + 1] = {};
+static char block_str[block_size * 4 + 1] = {};
+
+static constexpr uint64_t power10[] = {1,
+                                       10,
+                                       100,
+                                       1000,
+                                       10000,
+                                       100000,
+                                       1000000,
+                                       10000000,
+                                       100000000,
+                                       1000000000,
+                                       10000000000,
+                                       100000000000,
+                                       1000000000000,
+                                       10000000000000,
+                                       100000000000000,
+                                       1000000000000000,
+                                       10000000000000000,
+                                       100000000000000000,
+                                       1000000000000000000,
+                                       10000000000000000000u};
+
+struct Scanner
 {
-    char num[40000];
-    constexpr Pre() : num()
+  private:
+    size_t pos, end;
+
+    void load()
     {
-        for (int i = 0; i < 10000; i++)
+        end = fread(inbuf, 1, buf_size, stdin);
+        inbuf[end] = '\0';
+    }
+    void reload()
+    {
+        size_t len = end - pos;
+        memmove(inbuf, inbuf + pos, len);
+        end = len + fread(inbuf + len, 1, buf_size - len, stdin);
+        inbuf[end] = '\0';
+        pos = 0;
+    }
+    void skip_space()
+    {
+        while (inbuf[pos] <= ' ')
         {
-            int n = i;
-            for (int j = 3; j >= 0; j--)
+            if (__builtin_expect(++pos == end, 0))
+                reload();
+        }
+    }
+    char get_next()
+    {
+        return inbuf[pos++];
+    }
+    char get_next_nonspace()
+    {
+        skip_space();
+        return inbuf[pos++];
+    }
+
+  public:
+    Scanner()
+    {
+        load();
+    }
+
+    void scan(char &c)
+    {
+        c = get_next_nonspace();
+    }
+    void scan(std::string &s)
+    {
+        skip_space();
+        s = "";
+        do
+        {
+            size_t start = pos;
+            while (inbuf[pos] > ' ')
+                pos++;
+            s += std::string(inbuf + start, inbuf + pos);
+            if (inbuf[pos] != '\0')
+                break;
+            reload();
+        } while (true);
+    }
+
+    template <class T> typename std::enable_if<std::is_integral<T>::value, void>::type scan(T &x)
+    {
+        char c = get_next_nonspace();
+        if (__builtin_expect(pos + integer_size >= end, 0))
+            reload();
+        bool neg = false;
+        if (c == '-')
+            neg = true, x = 0;
+        else
+            x = c & 15;
+        while ((c = get_next()) >= '0')
+            x = x * 10 + (c & 15);
+        if (neg)
+            x = -x;
+    }
+
+    template <class Head, class... Others> void scan(Head &head, Others &...others)
+    {
+        scan(head);
+        scan(others...);
+    }
+
+    template <class T> Scanner &operator>>(T &x)
+    {
+        scan(x);
+        return *this;
+    }
+};
+
+struct Printer
+{
+  private:
+    size_t pos = 0;
+
+    void flush()
+    {
+        fwrite(outbuf, 1, pos, stdout);
+        pos = 0;
+    }
+
+    void pre_calc()
+    {
+        for (size_t i = 0; i < block_size; i++)
+        {
+            size_t j = 4, k = i;
+            while (j--)
             {
-                num[i * 4 + j] = n % 10 + '0';
-                n /= 10;
+                block_str[i * 4 + j] = k % 10 + '0';
+                k /= 10;
             }
         }
     }
-} constexpr pre;
 
-inline void load()
-{
-    int len = in_right - in_left;
-    memmove(inbuf, inbuf + in_left, len);
-    in_right = len + fread(inbuf + len, 1, SZ - len, stdin);
-    in_left = 0;
-}
-
-inline void flush()
-{
-    fwrite(outbuf, 1, out_right, stdout);
-    out_right = 0;
-}
-
-inline void skip_space()
-{
-    if (in_left + 32 > in_right)
-        load();
-    while (inbuf[in_left] <= ' ')
-        in_left++;
-}
-
-inline void rd(char &c)
-{
-    if (in_left + 32 > in_right)
-        load();
-    c = inbuf[in_left++];
-}
-template <typename T> inline void rd(T &x)
-{
-    if (in_left + 32 > in_right)
-        load();
-    char c;
-    do
-        c = inbuf[in_left++];
-    while (c < '-');
-    [[maybe_unused]] bool minus = false;
-    if constexpr (is_signed<T>::value == true)
+    static constexpr size_t get_integer_size(uint64_t n)
     {
-        if (c == '-')
-            minus = true, c = inbuf[in_left++];
+        if (n >= power10[10])
+        {
+            if (n >= power10[19])
+                return 20;
+            if (n >= power10[18])
+                return 19;
+            if (n >= power10[17])
+                return 18;
+            if (n >= power10[16])
+                return 17;
+            if (n >= power10[15])
+                return 16;
+            if (n >= power10[14])
+                return 15;
+            if (n >= power10[13])
+                return 14;
+            if (n >= power10[12])
+                return 13;
+            if (n >= power10[11])
+                return 12;
+            return 11;
+        }
+        else
+        {
+            if (n >= power10[9])
+                return 10;
+            if (n >= power10[8])
+                return 9;
+            if (n >= power10[7])
+                return 8;
+            if (n >= power10[6])
+                return 7;
+            if (n >= power10[5])
+                return 6;
+            if (n >= power10[4])
+                return 5;
+            if (n >= power10[3])
+                return 4;
+            if (n >= power10[2])
+                return 3;
+            if (n >= power10[1])
+                return 2;
+            return 1;
+        }
     }
-    x = 0;
-    while (c >= '0')
-    {
-        x = x * 10 + (c & 15);
-        c = inbuf[in_left++];
-    }
-    if constexpr (is_signed<T>::value == true)
-    {
-        if (minus)
-            x = -x;
-    }
-}
-inline void rd()
-{
-}
-template <typename Head, typename... Tail> inline void rd(Head &head, Tail &...tail)
-{
-    rd(head);
-    rd(tail...);
-}
 
-inline void wt(char c)
-{
-    if (out_right > SZ - 32)
+  public:
+    Printer()
+    {
+        pre_calc();
+    }
+    ~Printer()
+    {
         flush();
-    outbuf[out_right++] = c;
-}
-inline void wt(bool b)
-{
-    if (out_right > SZ - 32)
-        flush();
-    outbuf[out_right++] = b ? '1' : '0';
-}
-template <typename T> inline void wt(T x)
-{
-    if (out_right > SZ - 32)
-        flush();
-    if (!x)
-    {
-        outbuf[out_right++] = '0';
-        return;
     }
-    if constexpr (is_signed<T>::value == true)
+
+    void print(char c)
     {
+        outbuf[pos++] = c;
+        if (__builtin_expect(pos == buf_size, 0))
+            flush();
+    }
+    void print(const char *s)
+    {
+        while (*s != 0)
+        {
+            outbuf[pos++] = *s++;
+            // if (pos == buf_size) flush();
+            if (__builtin_expect(pos == buf_size, 0))
+                flush();
+        }
+    }
+    void print(const std::string &s)
+    {
+        for (auto c : s)
+        {
+            outbuf[pos++] = c;
+            // if (pos == buf_size) flush();
+            if (__builtin_expect(pos == buf_size, 0))
+                flush();
+        }
+    }
+
+    template <class T> typename std::enable_if<std::is_integral<T>::value, void>::type print(T x)
+    {
+        if (__builtin_expect(pos + integer_size >= buf_size, 0))
+            flush();
         if (x < 0)
-            outbuf[out_right++] = '-', x = -x;
-    }
-    int i = 12;
-    char buf[16];
-    while (x >= 10000)
-    {
-        memcpy(buf + i, pre.num + (x % 10000) * 4, 4);
-        x /= 10000;
-        i -= 4;
-    }
-    if (x < 100)
-    {
-        if (x < 10)
+            print('-'), x = -x;
+        size_t digit = get_integer_size(x);
+        size_t len = digit;
+        while (len >= 4)
         {
-            outbuf[out_right] = '0' + x;
-            ++out_right;
+            len -= 4;
+            memcpy(outbuf + pos + len, block_str + (x % block_size) * 4, 4);
+            x /= block_size;
         }
-        else
-        {
-            uint32_t q = (uint32_t(x) * 205) >> 11;
-            uint32_t r = uint32_t(x) - q * 10;
-            outbuf[out_right] = '0' + q;
-            outbuf[out_right + 1] = '0' + r;
-            out_right += 2;
-        }
+        memcpy(outbuf + pos, block_str + x * 4 + (4 - len), len);
+        pos += digit;
     }
-    else
-    {
-        if (x < 1000)
-        {
-            memcpy(outbuf + out_right, pre.num + (x << 2) + 1, 3);
-            out_right += 3;
-        }
-        else
-        {
-            memcpy(outbuf + out_right, pre.num + (x << 2), 4);
-            out_right += 4;
-        }
-    }
-    memcpy(outbuf + out_right, buf + i + 4, 12 - i);
-    out_right += 12 - i;
-}
-inline void wt()
-{
-}
-template <typename Head, typename... Tail> inline void wt(Head &&head, Tail &&...tail)
-{
-    wt(head);
-    wt(forward<Tail>(tail)...);
-}
-template <typename... Args> inline void wtn(Args &&...x)
-{
-    wt(forward<Args>(x)...);
-    wt('\n');
-}
 
-struct Dummy
-{
-    Dummy()
+    template <class Head, class... Others> void print(const Head &head, const Others &...others)
     {
-        atexit(flush);
+        print(head);
+        print(' ');
+        print(others...);
     }
-} dummy;
 
-} // namespace fastio
-using fastio::rd;
-using fastio::skip_space;
-using fastio::wt;
-using fastio::wtn;
+    template <class... Args> void println(const Args &...args)
+    {
+        print(args...);
+        print('\n');
+    }
+
+    template <class T> Printer &operator<<(const T &x)
+    {
+        print(x);
+        return *this;
+    }
+};
+}; // namespace fastio
+
+fastio::Scanner fin;
+fastio::Printer fout;
 const int SZ = 1024;
 const int NAIVE = 128;
 chrono::high_resolution_clock Clock;
-uint64_t modmod8 = 8ULL * 998244353 * 998244353;
-alignas(32) unsigned BUF[SZ * SZ], A[SZ * SZ], B[SZ * SZ], C[SZ * SZ], TMPMAT[3][(SZ * SZ - 1) / 3];
+int64_t modmod8 = 8ULL * 998244353 * 998244353;
+alignas(32) unsigned A[SZ * SZ], B[SZ * SZ], C[SZ * SZ], TMPMAT[3][349528], *BUF = &TMPMAT[0][0];
 alignas(32) uint64_t TMP[NAIVE * NAIVE];
 #ifdef __clang__
 int __lg(int x)
@@ -207,63 +298,61 @@ int __lg(int x)
     return --cnt;
 }
 #endif
-inline int ua(const unsigned a, const unsigned b)
+static inline __attribute__((always_inline)) int ua(const unsigned a, const unsigned b)
 {
     return min(a + b, a + b - 998244353);
 }
-inline int us(const unsigned a, const unsigned b)
+static inline __attribute__((always_inline)) int us(const unsigned a, const unsigned b)
 {
     return min(a - b, a + 998244353 - b);
 }
-void add03(const unsigned *a, unsigned *res, const int N)
+static inline __attribute__((always_inline)) void add03(const unsigned *a, unsigned *res, const int N)
 {
     for (int i = 0; i < N * N; i++)
         res[i] = ua(a[i], a[3 * N * N + i]);
 }
-void extract0(const unsigned *a, unsigned *res, const int N)
+static inline __attribute__((always_inline)) void extract0(const unsigned *a, unsigned *res, const int N)
 {
     for (int i = 0; i < N * N; i++)
         res[i] = a[i];
 }
-void extract3(const unsigned *a, unsigned *res, const int N)
+static inline __attribute__((always_inline)) void extract3(const unsigned *a, unsigned *res, const int N)
 {
     for (int i = 0; i < N * N; i++)
         res[i] = a[3 * N * N + i];
 }
-void add23(const unsigned *a, unsigned *res, const int N)
+static inline __attribute__((always_inline)) void add23(const unsigned *a, unsigned *res, const int N)
 {
     for (int i = 0; i < N * N; i++)
         res[i] = ua(a[2 * N * N + i], a[3 * N * N + i]);
 }
-void add01(const unsigned *a, unsigned *res, const int N)
+static inline __attribute__((always_inline)) void add01(const unsigned *a, unsigned *res, const int N)
 {
     for (int i = 0; i < N * N; i++)
         res[i] = ua(a[i], a[N * N + i]);
 }
-void sub13(const unsigned *a, unsigned *res, const int N)
+static inline __attribute__((always_inline)) void sub13(const unsigned *a, unsigned *res, const int N)
 {
     for (int i = 0; i < N * N; i++)
         res[i] = us(a[N * N + i], a[3 * N * N + i]);
 }
-void sub20(const unsigned *a, unsigned *res, const int N)
+static inline __attribute__((always_inline)) void sub20(const unsigned *a, unsigned *res, const int N)
 {
     for (int i = 0; i < N * N; i++)
         res[i] = us(a[2 * N * N + i], a[i]);
 }
-const int s1 = 128, s2 = 64, s3 = 32;
-alignas(32) __m256i tmp[8 * NAIVE];
-alignas(32) __m256i t0, t1, t2, t3, t4, t5, t6, t7;
+const int s1 = 64, s3 = 32;
+alignas(32) __m256i tmp[8 * s1];
 alignas(32) uint64_t bb[NAIVE * NAIVE], cc[NAIVE * NAIVE];
+const __m256i MM8 = {modmod8, modmod8, modmod8, modmod8};
 uint64_t Accum_time = 0;
 int calls = 0;
-// https://stackoverflow.com/questions/54394350/simd-implement-mm256-max-epu64-and-mm256-min-epu64
-static inline __attribute__((always_inline)) __m256i pmin_epu64(__m256i a, __m256i b)
+static inline __attribute__((always_inline)) __m256i shrink(__m256i a)
 {
-    __m256i signbit = _mm256_set1_epi64x(0x8000'0000'0000'0000);
-    __m256i mask = _mm256_cmpgt_epi64(_mm256_xor_si256(a, signbit), _mm256_xor_si256(b, signbit));
-    return _mm256_blendv_epi8(a, b, mask);
+    __m256i mask = _mm256_cmpgt_epi64(a - MM8, __m256i{});
+    return a - (MM8 & mask);
 }
-void naive(const unsigned *a, const unsigned *B, unsigned *C, const int N)
+static inline __attribute__((always_inline)) void naive(const unsigned *a, const unsigned *B, unsigned *C, const int N)
 {
     auto tp = Clock.now();
     memset(cc, 0, N * N * sizeof(uint64_t));
@@ -273,61 +362,62 @@ void naive(const unsigned *a, const unsigned *B, unsigned *C, const int N)
     calls++;
     for (int i3 = 0; i3 < N; i3 += s3)
     {
-        for (int k = 0; k < N; k++)
-        {
-            tmp[8 * k + 0] = b[k * N / 4 + i3 / 4 + 0];
-            tmp[8 * k + 1] = b[k * N / 4 + i3 / 4 + 1];
-            tmp[8 * k + 2] = b[k * N / 4 + i3 / 4 + 2];
-            tmp[8 * k + 3] = b[k * N / 4 + i3 / 4 + 3];
-            tmp[8 * k + 4] = b[k * N / 4 + i3 / 4 + 4];
-            tmp[8 * k + 5] = b[k * N / 4 + i3 / 4 + 5];
-            tmp[8 * k + 6] = b[k * N / 4 + i3 / 4 + 6];
-            tmp[8 * k + 7] = b[k * N / 4 + i3 / 4 + 7];
-        }
         for (int i1 = 0; i1 < N; i1 += s1)
-            for (int i2 = 0; i2 < N; i2 += s2)
-                for (int i = i2; i < i2 + s2; i++)
+        {
+            for (int k = i1; k < i1 + s1; k++)
+            {
+                tmp[8 * (k - i1) + 0] = b[k * N / 4 + i3 / 4 + 0];
+                tmp[8 * (k - i1) + 1] = b[k * N / 4 + i3 / 4 + 1];
+                tmp[8 * (k - i1) + 2] = b[k * N / 4 + i3 / 4 + 2];
+                tmp[8 * (k - i1) + 3] = b[k * N / 4 + i3 / 4 + 3];
+                tmp[8 * (k - i1) + 4] = b[k * N / 4 + i3 / 4 + 4];
+                tmp[8 * (k - i1) + 5] = b[k * N / 4 + i3 / 4 + 5];
+                tmp[8 * (k - i1) + 6] = b[k * N / 4 + i3 / 4 + 6];
+                tmp[8 * (k - i1) + 7] = b[k * N / 4 + i3 / 4 + 7];
+            }
+            for (int i = 0; i < N; i++)
+            {
+                __m256i t0 = _mm256_load_si256(c + (i * N + i3) / 4 + 0);
+                __m256i t1 = _mm256_load_si256(c + (i * N + i3) / 4 + 1);
+                __m256i t2 = _mm256_load_si256(c + (i * N + i3) / 4 + 2);
+                __m256i t3 = _mm256_load_si256(c + (i * N + i3) / 4 + 3);
+                __m256i t4 = _mm256_load_si256(c + (i * N + i3) / 4 + 4);
+                __m256i t5 = _mm256_load_si256(c + (i * N + i3) / 4 + 5);
+                __m256i t6 = _mm256_load_si256(c + (i * N + i3) / 4 + 6);
+                __m256i t7 = _mm256_load_si256(c + (i * N + i3) / 4 + 7);
+                for (int k = 0; k < s1; k++)
                 {
-                    t0 = _mm256_load_si256(c + (i * N + i3) / 4 + 0);
-                    t1 = _mm256_load_si256(c + (i * N + i3) / 4 + 1);
-                    t2 = _mm256_load_si256(c + (i * N + i3) / 4 + 2);
-                    t3 = _mm256_load_si256(c + (i * N + i3) / 4 + 3);
-                    t4 = _mm256_load_si256(c + (i * N + i3) / 4 + 4);
-                    t5 = _mm256_load_si256(c + (i * N + i3) / 4 + 5);
-                    t6 = _mm256_load_si256(c + (i * N + i3) / 4 + 6);
-                    t7 = _mm256_load_si256(c + (i * N + i3) / 4 + 7);
-                    for (int k = i1; k < i1 + s1; k++)
+                    __m256i aik = _mm256_set1_epi32(a[i * N + (k + i1)]);
+                    t0 = _mm256_add_epi64(t0, _mm256_mul_epu32(aik, tmp[8 * k + 0]));
+                    t1 = _mm256_add_epi64(t1, _mm256_mul_epu32(aik, tmp[8 * k + 1]));
+                    t2 = _mm256_add_epi64(t2, _mm256_mul_epu32(aik, tmp[8 * k + 2]));
+                    t3 = _mm256_add_epi64(t3, _mm256_mul_epu32(aik, tmp[8 * k + 3]));
+                    t4 = _mm256_add_epi64(t4, _mm256_mul_epu32(aik, tmp[8 * k + 4]));
+                    t5 = _mm256_add_epi64(t5, _mm256_mul_epu32(aik, tmp[8 * k + 5]));
+                    t6 = _mm256_add_epi64(t6, _mm256_mul_epu32(aik, tmp[8 * k + 6]));
+                    t7 = _mm256_add_epi64(t7, _mm256_mul_epu32(aik, tmp[8 * k + 7]));
+                    if (k % 8 == 7)
                     {
-                        __m256i aik = __m256i{} + a[i * N + k];
-                        if (k % 8 == 0)
-                        {
-                            t0 = pmin_epu64(t0, t0 - modmod8);
-                            t1 = pmin_epu64(t1, t1 - modmod8);
-                            t2 = pmin_epu64(t2, t2 - modmod8);
-                            t3 = pmin_epu64(t3, t3 - modmod8);
-                            t4 = pmin_epu64(t4, t4 - modmod8);
-                            t5 = pmin_epu64(t5, t5 - modmod8);
-                            t6 = pmin_epu64(t6, t6 - modmod8);
-                            t7 = pmin_epu64(t7, t7 - modmod8);
-                        }
-                        t0 = _mm256_add_epi64(t0, _mm256_mul_epi32(aik, tmp[8 * k + 0]));
-                        t1 = _mm256_add_epi64(t1, _mm256_mul_epi32(aik, tmp[8 * k + 1]));
-                        t2 = _mm256_add_epi64(t2, _mm256_mul_epi32(aik, tmp[8 * k + 2]));
-                        t3 = _mm256_add_epi64(t3, _mm256_mul_epi32(aik, tmp[8 * k + 3]));
-                        t4 = _mm256_add_epi64(t4, _mm256_mul_epi32(aik, tmp[8 * k + 4]));
-                        t5 = _mm256_add_epi64(t5, _mm256_mul_epi32(aik, tmp[8 * k + 5]));
-                        t6 = _mm256_add_epi64(t6, _mm256_mul_epi32(aik, tmp[8 * k + 6]));
-                        t7 = _mm256_add_epi64(t7, _mm256_mul_epi32(aik, tmp[8 * k + 7]));
+                        t0 = shrink(t0);
+                        t1 = shrink(t1);
+                        t2 = shrink(t2);
+                        t3 = shrink(t3);
+                        t4 = shrink(t4);
+                        t5 = shrink(t5);
+                        t6 = shrink(t6);
+                        t7 = shrink(t7);
                     }
-                    _mm256_store_si256(c + (i * N + i3) / 4 + 0, t0);
-                    _mm256_store_si256(c + (i * N + i3) / 4 + 1, t1);
-                    _mm256_store_si256(c + (i * N + i3) / 4 + 2, t2);
-                    _mm256_store_si256(c + (i * N + i3) / 4 + 3, t3);
-                    _mm256_store_si256(c + (i * N + i3) / 4 + 4, t4);
-                    _mm256_store_si256(c + (i * N + i3) / 4 + 5, t5);
-                    _mm256_store_si256(c + (i * N + i3) / 4 + 6, t6);
-                    _mm256_store_si256(c + (i * N + i3) / 4 + 7, t7);
                 }
+                _mm256_store_si256(c + i * N / 4 + (i3 + 0) / 4, t0);
+                _mm256_store_si256(c + i * N / 4 + (i3 + 4) / 4, t1);
+                _mm256_store_si256(c + i * N / 4 + (i3 + 8) / 4, t2);
+                _mm256_store_si256(c + i * N / 4 + (i3 + 12) / 4, t3);
+                _mm256_store_si256(c + i * N / 4 + (i3 + 16) / 4, t4);
+                _mm256_store_si256(c + i * N / 4 + (i3 + 20) / 4, t5);
+                _mm256_store_si256(c + i * N / 4 + (i3 + 24) / 4, t6);
+                _mm256_store_si256(c + i * N / 4 + (i3 + 28) / 4, t7);
+            }
+        }
     }
     for (int i = 0; i < N * N; i++)
         C[i] = cc[i] % 998244353;
@@ -422,16 +512,14 @@ signed main()
     cin.tie(0);
     cout.tie(0);
     int n, m, p;
-    rd(n);
-    rd(m);
-    rd(p);
+    fin >> n >> m >> p;
     for (int i = 0; i < n; i++)
         for (int j = 0; j < m; j++)
-            rd(BUF[i * SZ + j]);
+            fin >> BUF[i * SZ + j];
     prep(A, BUF, 0, 0, 0, SZ);
     for (int i = 0; i < m; i++)
         for (int j = 0; j < p; j++)
-            rd(BUF[i * SZ + j]);
+            fin >> BUF[i * SZ + j];
     prep(B, BUF, 0, 0, 0, SZ);
     auto t1 = Clock.now();
     mul(A, B, C, SZ);
@@ -442,7 +530,7 @@ signed main()
     for (int i = 0; i < n; i++)
         for (int j = 0; j < p; j++)
         {
-            wt(BUF[i * SZ + j]);
-            wt(j == p - 1 ? '\n' : ' ');
+            fout << BUF[i * SZ + j];
+            fout << (j == p - 1 ? '\n' : ' ');
         }
 }
