@@ -286,57 +286,45 @@ chrono::high_resolution_clock Clock;
 int64_t modmod8 = 8ULL * 998244353 * 998244353;
 alignas(32) unsigned A[SZ * SZ], B[SZ * SZ], C[SZ * SZ], TMPMAT[3][349528], *BUF = &TMPMAT[0][0];
 alignas(32) uint64_t TMP[NAIVE * NAIVE];
-#ifdef __clang__
-int __lg(int x)
-{
-    int cnt = 0;
-    while (x)
-    {
-        x >>= 1;
-        cnt++;
-    }
-    return --cnt;
-}
-#endif
-static inline __attribute__((always_inline)) int ua(const unsigned a, const unsigned b)
+inline int ua(const unsigned a, const unsigned b)
 {
     return min(a + b, a + b - 998244353);
 }
-static inline __attribute__((always_inline)) int us(const unsigned a, const unsigned b)
+inline int us(const unsigned a, const unsigned b)
 {
     return min(a - b, a + 998244353 - b);
 }
-static inline __attribute__((always_inline)) void add03(const unsigned *a, unsigned *res, const int N)
+void add03(const unsigned *a, unsigned *res, const int N)
 {
     for (int i = 0; i < N * N; i++)
         res[i] = ua(a[i], a[3 * N * N + i]);
 }
-static inline __attribute__((always_inline)) void extract0(const unsigned *a, unsigned *res, const int N)
+void extract0(const unsigned *a, unsigned *res, const int N)
 {
     for (int i = 0; i < N * N; i++)
         res[i] = a[i];
 }
-static inline __attribute__((always_inline)) void extract3(const unsigned *a, unsigned *res, const int N)
+void extract3(const unsigned *a, unsigned *res, const int N)
 {
     for (int i = 0; i < N * N; i++)
         res[i] = a[3 * N * N + i];
 }
-static inline __attribute__((always_inline)) void add23(const unsigned *a, unsigned *res, const int N)
+void add23(const unsigned *a, unsigned *res, const int N)
 {
     for (int i = 0; i < N * N; i++)
         res[i] = ua(a[2 * N * N + i], a[3 * N * N + i]);
 }
-static inline __attribute__((always_inline)) void add01(const unsigned *a, unsigned *res, const int N)
+void add01(const unsigned *a, unsigned *res, const int N)
 {
     for (int i = 0; i < N * N; i++)
         res[i] = ua(a[i], a[N * N + i]);
 }
-static inline __attribute__((always_inline)) void sub13(const unsigned *a, unsigned *res, const int N)
+void sub13(const unsigned *a, unsigned *res, const int N)
 {
     for (int i = 0; i < N * N; i++)
         res[i] = us(a[N * N + i], a[3 * N * N + i]);
 }
-static inline __attribute__((always_inline)) void sub20(const unsigned *a, unsigned *res, const int N)
+void sub20(const unsigned *a, unsigned *res, const int N)
 {
     for (int i = 0; i < N * N; i++)
         res[i] = us(a[2 * N * N + i], a[i]);
@@ -408,14 +396,14 @@ static inline __attribute__((always_inline)) void naive(const unsigned *a, const
                         t7 = shrink(t7);
                     }
                 }
-                _mm256_store_si256(c + i * N / 4 + (i3 + 0) / 4, t0);
-                _mm256_store_si256(c + i * N / 4 + (i3 + 4) / 4, t1);
-                _mm256_store_si256(c + i * N / 4 + (i3 + 8) / 4, t2);
-                _mm256_store_si256(c + i * N / 4 + (i3 + 12) / 4, t3);
-                _mm256_store_si256(c + i * N / 4 + (i3 + 16) / 4, t4);
-                _mm256_store_si256(c + i * N / 4 + (i3 + 20) / 4, t5);
-                _mm256_store_si256(c + i * N / 4 + (i3 + 24) / 4, t6);
-                _mm256_store_si256(c + i * N / 4 + (i3 + 28) / 4, t7);
+                _mm256_store_si256(c + (i * N + i3) / 4 + 0, t0);
+                _mm256_store_si256(c + (i * N + i3) / 4 + 1, t1);
+                _mm256_store_si256(c + (i * N + i3) / 4 + 2, t2);
+                _mm256_store_si256(c + (i * N + i3) / 4 + 3, t3);
+                _mm256_store_si256(c + (i * N + i3) / 4 + 4, t4);
+                _mm256_store_si256(c + (i * N + i3) / 4 + 5, t5);
+                _mm256_store_si256(c + (i * N + i3) / 4 + 6, t6);
+                _mm256_store_si256(c + (i * N + i3) / 4 + 7, t7);
             }
         }
     }
