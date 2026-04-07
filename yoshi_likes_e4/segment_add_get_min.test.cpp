@@ -2,7 +2,6 @@
 #define PROBLEM "https://judge.yosupo.jp/problem/segment_add_get_min"
 #include <bits/stdc++.h>
 using namespace std;
-#define int long long
 #ifndef yoshi_likes_e4
 #define endl '\n'
 #endif
@@ -14,7 +13,7 @@ void init()
 }
 struct line
 {
-    int32_t m;
+    int m;
     long long c;
     long long eval(long long x)
     {
@@ -33,10 +32,10 @@ struct CHT
     {
         return __int128_t(a.c - b.c) * (c.m - b.m) >= __int128_t(b.c - c.c) * (b.m - a.m);
     }
-    bool cmpx(line &a, line &b, __int128_t c)
+    bool cmpx(line &a, line &b, int c)
     {
-        int u = a.c - b.c, v = b.m - a.m;
-        return (v > 0 ? u < c * v : u > c * v);
+        long long u = a.c - b.c, v = b.m - a.m;
+        return (v > 0 ? u < v * c : u > v * c);
     }
     vector<line> lines;
     CHT()
@@ -53,7 +52,7 @@ struct CHT
         lines.push_back(cur);
         idx = lines.size() - 1;
     }
-    int _Query(int x)
+    long long _Query(int x)
     {
         if (!lines.size())
             return -3e18;
@@ -64,10 +63,11 @@ struct CHT
 };
 struct Qu
 {
-    // l is mapped to p when r is -1e10
-    int l, r, a, b;
+    // l is mapped to p when r is < -1e9
+    int l, r, a;
+    long long b;
 };
-vector<int> qres;
+vector<long long> qres;
 vector<Qu> qus;
 vector<int> lso, rso, aso, tmpu_id;
 struct Segment
@@ -89,9 +89,9 @@ struct ST
     {
         t.resize(2 * n);
     }
-    int query(int p, int x)
+    long long query(int p, int x)
     {
-        int mn = -3e18;
+        long long mn = -3e18;
         p += n;
         while (p)
         {
@@ -100,7 +100,7 @@ struct ST
         }
         return -mn;
     }
-    void modify(int l, int r, int32_t a, int b)
+    void modify(int l, int r, int a, long long b)
     {
         for (l += n, r += n; l < r; l >>= 1, r >>= 1)
         {
@@ -113,7 +113,7 @@ struct ST
 };
 void DNC(int l, int r)
 {
-    if (r - l > 32)
+    if (r - l > 200)
     {
         int mid = (l + r) >> 1;
         DNC(l, mid);
@@ -175,11 +175,19 @@ void DNC(int l, int r)
     }
     else
     {
+        vector<int> idx;
+        for (int i = l; i <= r; i++)
+            if (qus[i].r >= -1e9)
+                idx.push_back(i);
         for (int i = l; i <= r; i++)
             if (qus[i].r < -1e9)
-                for (int j = l; j < i; j++)
-                    if (qus[j].r >= -1e9 && qus[j].l <= qus[i].l && qus[i].l <= qus[j].r)
-                        qres[i] = min(qres[i], qus[j].a * qus[i].l + qus[j].b);
+                for (auto &j : idx)
+                {
+                    if (j > i)
+                        break;
+                    if (qus[j].l <= qus[i].l && qus[i].l <= qus[j].r)
+                        qres[i] = min(qres[i], (long long)(qus[j].a) * qus[i].l + qus[j].b);
+                }
         sort(lso.begin() + l, lso.begin() + r + 1, [&](auto &a, auto &b) { return qus[a].l < qus[b].l; });
         sort(rso.begin() + l, rso.begin() + r + 1, [&](auto &a, auto &b) { return qus[a].r < qus[b].r; });
         sort(aso.begin() + l, aso.begin() + r + 1, [&](auto &a, auto &b) {
@@ -207,7 +215,7 @@ void Yoshi()
         if (a == 0)
             cin >> qus[i].l >> qus[i].r >> qus[i].a >> qus[i].b, qus[i].r--;
         else
-            cin >> qus[i].l, qus[i].r = -1e10;
+            cin >> qus[i].l, qus[i].r = -1e9 - 1;
     }
     DNC(0, n + q - 1);
     for (int i = 0; i < n + q; i++)
